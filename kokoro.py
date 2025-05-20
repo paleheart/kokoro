@@ -1,11 +1,22 @@
 # Kokoro Compiler - Prototype v0.1
 # By Kuroshio Industrial Logic Systems
 
-def handle_store(tokens, output):
-    # Example: store 42 in x as WholeNumber
-    value = tokens[1]
-    name = tokens[3]
-    # For now, we ignore type
+def handle_store(tokens, output, symbol_table=None):
+    # Find positions of key keywords
+    in_index = tokens.index("in")
+    as_index = tokens.index("as")
+
+    # Extract destination name and optional type
+    name = tokens[in_index + 1]
+    var_type = tokens[as_index + 1] if as_index + 1 < len(tokens) else None
+
+    # Get everything between 'store' and 'in' as the expression
+    expr_tokens = tokens[1:in_index]
+
+    # Pass to math evaluator (returns either a constant or instruction list)
+    value = math_eval(expr_tokens)
+
+    # Emit for now as simple constant assignment
     output.write(f"LDA #{value}\nSTA {name}\n\n")
 
 def handle_print(tokens, output):
@@ -18,6 +29,9 @@ def handle_input(tokens, output):
 
 def handle_unknown(tokens, output):
     output.write(f"; Unrecognized line: {' '.join(tokens)}\n\n")
+
+def math_eval(tokens, output):
+    
 
 # Command name to function mapping
 handlers = {
