@@ -1,0 +1,20 @@
+# KOKORO TEST CASE 1
+
+# This test case tests the store command
+
+
+# Test storing multiple variables to make sure symbols are assigned properly
+STORE 10 IN x AS NUMBER
+STORE 20 IN y AS NUMBER
+STORE 33 IN z AS NUMBER
+
+# Test getting values from variables and storing them in other variables
+
+STORE x IN g AS NUMBER
+STORE z + x IN h AS NUMBER
+
+# Test Array assignment
+
+STORE 10, 20, 30 IN t AS ARRAY OF NUMBERS
+
+# Verify by checking the memory locations for proper assignments

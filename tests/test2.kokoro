@@ -1,0 +1,21 @@
+# KOKORO TEST CASE 2
+# This test runs through the if statements basic functionality without using else or else if
+
+STORE 10 IN X AS NUMBER
+STORE 20 IN Y AS NUMBER
+
+IF Y IS GREATER_THAN X DO {
+    STORE X + Y IN Z AS NUMBER
+}
+
+IF X IS LESS_THAN Z DO {
+    STORE X IN T AS NUMBER
+}
+
+IF X IS EQUAL_TO T DO {
+    STORE Y IN D AS NUMBER
+}
+
+IF X IS NOT_EQUAL_TO Y DO {
+    STORE Z IN W AS NUMBER
+}

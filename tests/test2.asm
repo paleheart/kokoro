@@ -1,0 +1,40 @@
+LDA #10
+STA $0200
+
+LDA #20
+STA $0201
+
+LDA $0201
+CMP $0200
+BCC skip_if_0
+LDA $0200
+CLC
+ADC $0201
+STA $0202
+
+skip_if_0:
+
+LDA $0200
+CMP $0202
+BCS skip_if_1
+LDA $0200
+STA $0203
+
+skip_if_1:
+
+LDA $0200
+CMP $0203
+BNE skip_if_2
+LDA $0201
+STA $0204
+
+skip_if_2:
+
+LDA $0200
+CMP $0201
+BEQ skip_if_3
+LDA $0202
+STA $0205
+
+skip_if_3:
+

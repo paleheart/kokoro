@@ -1,0 +1,20 @@
+# KOKORO TEST CASE 3
+# This test runs through basic math operators
+
+STORE 10 IN X AS NUMBER
+STORE 3 IN Y AS NUMBER
+
+# Addition
+STORE X + Y IN A AS NUMBER
+
+# Subtraction
+STORE X - Y IN B AS NUMBER
+
+# Multiplication
+STORE X * Y IN C AS NUMBER
+
+# Division (integer division)
+STORE X / Y IN D AS NUMBER
+
+# Modulo
+STORE X % Y IN E AS NUMBER
