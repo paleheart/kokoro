@@ -1,3 +1,0 @@
-C:/Users/achristian/Documents/GitHub/kokoro/build/CMakeFiles/kokoro.dir
-C:/Users/achristian/Documents/GitHub/kokoro/build/CMakeFiles/ALL_BUILD.dir
-C:/Users/achristian/Documents/GitHub/kokoro/build/CMakeFiles/ZERO_CHECK.dir
