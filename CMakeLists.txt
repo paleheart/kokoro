@@ -13,4 +13,9 @@ add_executable(kokoro
 )
 
 # Add warning flags
-target_compile_options(kokoro PRIVATE /W4)
+# Add warning flags per platform
+if (MSVC)
+    target_compile_options(kokoro PRIVATE /W4)
+else()
+    target_compile_options(kokoro PRIVATE -Wall -Wextra)
+endif()

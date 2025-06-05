@@ -15,6 +15,17 @@ STORE z + x IN h AS NUMBER
 
 # Test Array assignment
 
-STORE 10, 20, 30 IN t AS ARRAY OF NUMBERS
+STORE 10, 20, 30 IN t AS ARRAY OF  3 NUMBERS
+
+# test getting data out of an Array
+
+STORE t's array value 3 IN e AS NUMBER
+
+# write and read memory
+
+STORE 33 IN MEMORY ff00 AS NUMBER
+
+STORE MEMORY ff00 IN n AS NUMBER
 
 # Verify by checking the memory locations for proper assignments
+

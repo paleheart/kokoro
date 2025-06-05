@@ -8,6 +8,7 @@
 
 #define TARGET_6502 1
 #define TARGET_MEGA6502 2
+
 int TARGET = TARGET_6502;
 
 #define MAX_LINE 256
@@ -48,6 +49,15 @@ int get_var_address(const char *name, int size, int is_array) {
     symbol_count++;
     next_address += size > 0 ? size : 1;
     return addr;
+}
+
+int is_constant(char *s)
+{
+    // Simple: is it all digits? Then it's a constant.
+    for (int i = 0; s[i]; i++) {
+        if (!isdigit((unsigned char)s[i])) return 0;
+    }
+    return 1;
 }
 
 void print_memory_map() {
@@ -183,6 +193,33 @@ void handle_store(char *line, FILE *output)
         }
         fprintf(output, "\n");
     }
+    // New: Array element access with "T'S ARRAY VALUE N"
+    else if (strstr(line, "'s array value")) {
+        char src_var[32], index_str[32], dest_var[32];
+
+        // Example: store t's array value 3 in e as number
+        sscanf(line, "store %31[^']'s array value %31[^i] in %31s as number", src_var, index_str, dest_var);
+
+        trim_cr(src_var);
+        trim_cr(index_str);
+        trim_cr(dest_var);
+
+        int base_addr = get_var_address(src_var, 0, 1);
+        int index = atoi(index_str);
+
+        // Arrays are 1-based → adjust index to 0-based
+        int real_index = index - 1;
+
+        // Get address of t[index]
+        int src_addr = base_addr + real_index;
+
+        // Get address of destination var
+        int dest_addr = get_var_address(dest_var, 1, 0);
+
+        // Emit code: load array value → store to destination
+        fprintf(output, "LDA $%04X\n", src_addr);
+        fprintf(output, "STA $%04X\n\n", dest_addr);
+    }
     // Array element assignment (literal index only for now)
     else if (strstr(line, "[") && strstr(line, "]")) {
         char value[32], var[32], idx_str[32];
@@ -195,6 +232,43 @@ void handle_store(char *line, FILE *output)
         int base_addr = get_var_address(var, 0, 1);
         int idx = atoi(idx_str);
         fprintf(output, "LDA #%s\nSTA $%04X\n\n", value, base_addr + idx);
+    }
+    // Memory READ: STORE MEMORY <addr> IN <var> AS <type>
+    else if (strstr(line, "store memory")) {
+        char addr_str[32], var[32], type[32];
+
+        sscanf(line, "store memory %31[^i] in %31s as %31s", addr_str, var, type);
+
+        trim_cr(addr_str);
+        trim_cr(var);
+        trim_cr(type);
+
+        unsigned int addr = 0;
+        sscanf(addr_str, "%x", &addr);  // parse hex address
+
+        int dest_addr = get_var_address(var, 1, 0);
+
+        // Emit:
+        fprintf(output, "LDA $%04X\n", addr);
+        fprintf(output, "STA $%04X\n\n", dest_addr);
+    }
+
+    // Memory WRITE: STORE <value> IN MEMORY <addr> AS <type>
+    else if (strstr(line, "in memory")) {
+        char value[32], addr_str[32], type[32];
+
+        sscanf(line, "store %31[^i] in memory %31[^a] as %31s", value, addr_str, type);
+
+        trim_cr(value);
+        trim_cr(addr_str);
+        trim_cr(type);
+
+        unsigned int addr = 0;
+        sscanf(addr_str, "%x", &addr);  // parse hex address
+
+        // Emit:
+        fprintf(output, "LDA #%s\n", value);
+        fprintf(output, "STA $%04X\n\n", addr);
     }
     // Scalar variable assignment
     else {
@@ -228,12 +302,96 @@ void handle_store(char *line, FILE *output)
 
 void handle_print(char *line, FILE *output)
 {
-    char what[64];
-    int n = sscanf(line, "print %63[^\n]", what);
+    char arg[256];
+    sscanf(line, "print %255[^\n]", arg);
+    trim_cr(arg);
 
-    int addr = get_var_address(what, 1, 0); // Ensure symbol exists/get addr
-    fprintf(output, "LDA $%04X\n", addr);
-    fprintf(output, "JSR PrintDigit\n\n"); // Assume PrintDigit prints value in A to screen
+    // Constants
+    const int SCREEN_BASE = 0xE000;
+    const int SCREEN_WIDTH = 40;
+
+    // Addresses of cursor_x and cursor_y
+    const int CURSOR_X_ADDR = 0xF002;
+    const int CURSOR_Y_ADDR = 0xF003;
+
+    // Check if it's a string literal
+    if (arg[0] == '"' && arg[strlen(arg) - 1] == '"') {
+        // Strip quotes
+        arg[strlen(arg) - 1] = '\0';
+        char *str = arg + 1;
+
+        // For each character in the string
+        for (size_t i = 0; i < strlen(str); i++) {
+            // Multiply cursor_y * SCREEN_WIDTH
+            emit_multiply("$F003", "40", output);
+
+            fprintf(output, "CLC\n");
+
+            // Load cursor_x and add
+            fprintf(output, "ADC $%04X\n", CURSOR_X_ADDR);
+
+            // Store as screen address
+            fprintf(output, "STA temp_addr_low\n");
+            fprintf(output, "LDA #%02X\n", (SCREEN_BASE >> 8));
+            fprintf(output, "STA temp_addr_high\n");
+
+            // Write character
+            fprintf(output, "LDA #%d\n", str[i]);
+            fprintf(output, "LDY #0\n");
+            fprintf(output, "STA (temp_addr_low),Y\n");
+
+            // Advance cursor_x
+            fprintf(output, "INC $%04X\n", CURSOR_X_ADDR);
+            fprintf(output, "LDA $%04X\n", CURSOR_X_ADDR);
+            fprintf(output, "CMP #%d\n", SCREEN_WIDTH);
+            fprintf(output, "BNE print_continue_%zu\n", i);
+
+            // Wrap to next line
+            fprintf(output, "LDA #0\n");
+            fprintf(output, "STA $%04X\n", CURSOR_X_ADDR);
+            fprintf(output, "INC $%04X\n", CURSOR_Y_ADDR);
+
+            fprintf(output, "print_continue_%zu:\n", i);
+        }
+
+        fprintf(output, "\n");
+    }
+    else {
+        // It's a variable → print its value
+        int var_addr = get_var_address(arg, 1, 0);
+
+        // Multiply cursor_y * SCREEN_WIDTH
+        emit_multiply("$F003", "40", output);
+
+        fprintf(output, "CLC\n");
+
+        // Load cursor_x and add
+        fprintf(output, "ADC $%04X\n", CURSOR_X_ADDR);
+
+        // Store as screen address
+        fprintf(output, "STA temp_addr_low\n");
+        fprintf(output, "LDA #%02X\n", (SCREEN_BASE >> 8));
+        fprintf(output, "STA temp_addr_high\n");
+
+        // Write variable value
+        fprintf(output, "LDA $%04X\n", var_addr);
+        fprintf(output, "LDY #0\n");
+        fprintf(output, "STA (temp_addr_low),Y\n");
+
+        // Advance cursor_x
+        fprintf(output, "INC $%04X\n", CURSOR_X_ADDR);
+        fprintf(output, "LDA $%04X\n", CURSOR_X_ADDR);
+        fprintf(output, "CMP #%d\n", SCREEN_WIDTH);
+        fprintf(output, "BNE print_continue_var\n");
+
+        // Wrap to next line
+        fprintf(output, "LDA #0\n");
+        fprintf(output, "STA $%04X\n", CURSOR_X_ADDR);
+        fprintf(output, "INC $%04X\n", CURSOR_Y_ADDR);
+
+        fprintf(output, "print_continue_var:\n");
+        fprintf(output, "\n");
+    }
 }
 
 void handle_call(char *line, FILE *output)
@@ -269,13 +427,21 @@ void handle_if(char *line, FILE *output, FILE *input)
         return;
     }
 
-    // Get addresses of variables:
-    int addr1 = get_var_address(var1, 1, 0);
-    int addr2 = get_var_address(var2, 1, 0);
+  // Get address of left-hand variable:
+int addr1 = get_var_address(var1, 1, 0);
 
-    // Emit comparison
-    fprintf(output, "LDA $%04X\n", addr1);
+// Emit LDA for left-hand side:
+fprintf(output, "LDA $%04X\n", addr1);
+
+// Emit CMP:
+if (is_constant(var2)) {
+    // Right-hand side is a constant → use immediate mode
+    fprintf(output, "CMP #%s\n", var2);
+} else {
+    // Right-hand side is a variable → get its address
+    int addr2 = get_var_address(var2, 1, 0);
     fprintf(output, "CMP $%04X\n", addr2);
+}
 
     // Generate unique label
     static int if_count = 0;
@@ -462,8 +628,44 @@ void math_eval(char *expr, char *result, FILE *output)
 void emit_multiply(char *left, char *right, FILE *output)
 {
     if (TARGET == TARGET_6502) {
-        fprintf(output, "; 6502 multiply: JSR Multiply (args: %s, %s)\n", left, right);
-    } else if (TARGET == TARGET_MEGA6502) {
+        fprintf(output, "; 6502 multiply: %s * %s\n", left, right);
+
+        if (strcmp(right, "40") == 0) {
+            // Example temp addresses
+            const int TEMP_MULTIPLY = 0xF004;
+            const int TEMP_32 = 0xF005;
+            const int TEMP_8 = 0xF006;
+
+            // A = left
+            fprintf(output, "LDA %s\n", left);
+            fprintf(output, "STA $%04X\n", TEMP_MULTIPLY);
+
+            // A * 32
+            fprintf(output, "LDA $%04X\n", TEMP_MULTIPLY);
+            fprintf(output, "ASL A\n");
+            fprintf(output, "ASL A\n");
+            fprintf(output, "ASL A\n");
+            fprintf(output, "ASL A\n");
+            fprintf(output, "ASL A\n");
+            fprintf(output, "STA $%04X\n", TEMP_32);
+
+            // A * 8
+            fprintf(output, "LDA $%04X\n", TEMP_MULTIPLY);
+            fprintf(output, "ASL A\n");
+            fprintf(output, "ASL A\n");
+            fprintf(output, "ASL A\n");
+            fprintf(output, "STA $%04X\n", TEMP_8);
+
+            // Add results
+            fprintf(output, "CLC\n");
+            fprintf(output, "LDA $%04X\n", TEMP_32);
+            fprintf(output, "ADC $%04X\n", TEMP_8);
+            // Result now in A
+        } else {
+            fprintf(output, "; Fallback multiply not implemented yet for %s * %s\n", left, right);
+        }
+    }
+    else if (TARGET == TARGET_MEGA6502) {
         fprintf(output, "MUL %s, %s\n", left, right);
     }
 }
